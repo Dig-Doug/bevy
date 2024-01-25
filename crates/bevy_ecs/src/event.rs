@@ -33,6 +33,7 @@ pub struct EventId<E: Event> {
 }
 
 impl<E: Event> Copy for EventId<E> {}
+
 impl<E: Event> Clone for EventId<E> {
     fn clone(&self) -> Self {
         *self
@@ -206,8 +207,8 @@ impl<E: Event> Events<E> {
 
     /// Sends the default value of the event. Useful when the event is an empty struct.
     pub fn send_default(&mut self)
-    where
-        E: Default,
+        where
+            E: Default,
     {
         self.send(Default::default());
     }
@@ -239,7 +240,7 @@ impl<E: Event> Events<E> {
     ///
     /// If you do not need to take ownership of the removed events, use [`Events::update`] instead.
     #[must_use = "If you do not need the returned events, call .update() instead."]
-    pub fn update_drain(&mut self) -> impl Iterator<Item = E> + '_ {
+    pub fn update_drain(&mut self) -> impl Iterator<Item=E> + '_ {
         std::mem::swap(&mut self.events_a, &mut self.events_b);
         let iter = self.events_b.events.drain(..);
         self.events_b.start_event_count = self.event_count;
@@ -278,7 +279,7 @@ impl<E: Event> Events<E> {
     }
 
     /// Creates a draining iterator that removes all events.
-    pub fn drain(&mut self) -> impl Iterator<Item = E> + '_ {
+    pub fn drain(&mut self) -> impl Iterator<Item=E> + '_ {
         self.reset_start_event_count();
 
         // Drain the oldest events first, then the newest
@@ -294,7 +295,7 @@ impl<E: Event> Events<E> {
     /// between the last `update()` call and your call to `iter_current_update_events`.
     /// If events happen outside that window, they will not be handled. For example, any events that
     /// happen after this call and before the next `update()` call will be dropped.
-    pub fn iter_current_update_events(&self) -> impl ExactSizeIterator<Item = &E> {
+    pub fn iter_current_update_events(&self) -> impl ExactSizeIterator<Item=&E> {
         self.events_b.iter().map(|i| &i.event)
     }
 
@@ -329,8 +330,8 @@ impl<E: Event> Events<E> {
 
 impl<E: Event> std::iter::Extend<E> for Events<E> {
     fn extend<I>(&mut self, iter: I)
-    where
-        I: IntoIterator<Item = E>,
+        where
+            I: IntoIterator<Item=E>,
     {
         let old_count = self.event_count;
         let mut event_count = self.event_count;
@@ -522,14 +523,14 @@ impl<'w, E: Event> EventWriter<'w, E> {
     /// This is more efficient than sending each event individually.
     ///
     /// See [`Events`] for details.
-    pub fn send_batch(&mut self, events: impl IntoIterator<Item = E>) {
+    pub fn send_batch(&mut self, events: impl IntoIterator<Item=E>) {
         self.events.extend(events);
     }
 
     /// Sends the default value of the event. Useful when the event is an empty struct.
     pub fn send_default(&mut self)
-    where
-        E: Default,
+        where
+            E: Default,
     {
         self.events.send_default();
     }
@@ -630,8 +631,8 @@ impl<'a, E: Event> Iterator for EventIterator<'a, E> {
     }
 
     fn last(self) -> Option<Self::Item>
-    where
-        Self: Sized,
+        where
+            Self: Sized,
     {
         self.iter.last().map(|(event, _)| event)
     }
@@ -725,8 +726,8 @@ impl<'a, E: Event> Iterator for EventIteratorWithId<'a, E> {
     }
 
     fn last(self) -> Option<Self::Item>
-    where
-        Self: Sized,
+        where
+            Self: Sized,
     {
         let EventInstance { event_id, event } = self.chain.last()?;
         self.reader.last_event_count += self.unread;
@@ -750,29 +751,50 @@ impl<'a, E: Event> ExactSizeIterator for EventIteratorWithId<'a, E> {
 }
 
 #[doc(hidden)]
+#[derive(Resource)]
+pub struct EventUpdateSignal<T: Event>{
+    signal: bool,
+    _marker: PhantomData<fn() -> T>,
+}
+
+impl <T: Event> Default for EventUpdateSignal<T> {
+    fn default() -> Self {
+        Self {
+            signal: false,
+            _marker: PhantomData,
+        }
+    }
+}
+
+#[doc(hidden)]
 #[derive(Resource, Default)]
-pub struct EventUpdateSignal(bool);
+pub struct EventUpdateShouldWaitForFixedUpdate;
 
 /// A system that queues a call to [`Events::update`].
-pub fn event_queue_update_system(signal: Option<ResMut<EventUpdateSignal>>) {
+pub fn event_queue_update_system<T: Event>(signal: Option<ResMut<EventUpdateSignal<T>>>) {
     if let Some(mut s) = signal {
-        s.0 = true;
+        info!("event_queue_update_system");
+        s.signal = true;
     }
 }
 
 /// A system that calls [`Events::update`].
 pub fn event_update_system<T: Event>(
-    signal: Option<ResMut<EventUpdateSignal>>,
+    should_wait: Option<Res<EventUpdateShouldWaitForFixedUpdate>>,
+    mut should_update: ResMut<EventUpdateSignal<T>>,
     mut events: ResMut<Events<T>>,
 ) {
-    if let Some(mut s) = signal {
+    if should_wait.is_some() {
         // If we haven't got a signal to update the events, but we *could* get such a signal
         // return early and update the events later.
-        if !std::mem::replace(&mut s.0, false) {
+        if !std::mem::replace(&mut should_update.signal, false) {
             return;
         }
     }
 
+    if format!("{:?}", TypeId::of::<T>()) == "TypeId { t: 135550485160157868001486985238917699988 }" {
+        info!("event_update_system-update: {:?}", TypeId::of::<T>());
+    }
     events.update();
 }
 

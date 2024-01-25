@@ -26,7 +26,7 @@ pub mod prelude {
 }
 
 use bevy_app::{prelude::*, RunFixedUpdateLoop};
-use bevy_ecs::event::{event_queue_update_system, EventUpdateSignal};
+use bevy_ecs::event::{EventUpdateShouldWaitForFixedUpdate};
 use bevy_ecs::prelude::*;
 use bevy_utils::{tracing::warn, Duration, Instant};
 pub use crossbeam_channel::TrySendError;
@@ -61,8 +61,7 @@ impl Plugin for TimePlugin {
             .add_systems(RunFixedUpdateLoop, run_fixed_update_schedule);
 
         // ensure the events are not dropped until `FixedUpdate` systems can observe them
-        app.init_resource::<EventUpdateSignal>()
-            .add_systems(FixedUpdate, event_queue_update_system);
+        app.init_resource::<EventUpdateShouldWaitForFixedUpdate>();
 
         #[cfg(feature = "bevy_ci_testing")]
         if let Some(ci_testing_config) = app
